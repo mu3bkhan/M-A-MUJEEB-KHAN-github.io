@@ -297,10 +297,118 @@ Problem-solving · Analytical thinking · Willingness to learn · Teamwork and c
       <text x="1065" y="795">0xA4</text>
       <text x="270" y="105">0x9C</text>
     </g>
-  </svg>
+ <!-- =========================================================
+  ANIMATED BACKGROUND — particle network (canvas)
+  Paste this block near the TOP of your README.md
+  (works because GitHub Pages/Jekyll renders raw HTML/JS;
+  it just won't animate on github.com itself, only on your
+  live *.github.io page)
+========================================================== -->
 
-  <div class="vignette"></div>
-  <div class="grain"></div>
+<div id="bg-canvas-wrap">
+  <canvas id="bg-canvas"></canvas>
 </div>
-</body>
-</html>
+
+<style>
+  #bg-canvas-wrap {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    background: radial-gradient(circle at 50% 0%, #0d1b2a 0%, #030712 70%);
+  }
+  #bg-canvas { width: 100%; height: 100%; display: block; }
+
+  /* Make sure your page content sits above the background and is readable */
+  body { background: transparent !important; }
+</style>
+
+<script>
+(function () {
+  var canvas = document.getElementById('bg-canvas');
+  var ctx = canvas.getContext('2d');
+  var particles = [];
+  var mouse = { x: null, y: null };
+  var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    initParticles();
+  }
+
+  function initParticles() {
+    var count = Math.min(110, Math.floor((canvas.width * canvas.height) / 14000));
+    particles = [];
+    for (var i = 0; i < count; i++) {
+      particles.push({
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        vx: (Math.random() - 0.5) * 0.4,
+        vy: (Math.random() - 0.5) * 0.4,
+        r: Math.random() * 1.6 + 0.6
+      });
+    }
+  }
+
+  function step() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // update + draw particles
+    for (var i = 0; i < particles.length; i++) {
+      var p = particles[i];
+      p.x += p.vx;
+      p.y += p.vy;
+
+      if (p.x < 0 || p.x > canvas.width) p.vx *= -1;
+      if (p.y < 0 || p.y > canvas.height) p.vy *= -1;
+
+      // gentle attraction toward cursor
+      if (mouse.x !== null) {
+        var dx = mouse.x - p.x, dy = mouse.y - p.y;
+        var dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < 140) {
+          p.x -= dx * 0.002;
+          p.y -= dy * 0.002;
+        }
+      }
+
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(56, 189, 248, 0.8)'; // cyan
+      ctx.fill();
+    }
+
+    // draw connecting lines between nearby particles
+    for (var a = 0; a < particles.length; a++) {
+      for (var b = a + 1; b < particles.length; b++) {
+        var dx2 = particles[a].x - particles[b].x;
+        var dy2 = particles[a].y - particles[b].y;
+        var dist2 = Math.sqrt(dx2 * dx2 + dy2 * dy2);
+        if (dist2 < 120) {
+          ctx.beginPath();
+          ctx.moveTo(particles[a].x, particles[a].y);
+          ctx.lineTo(particles[b].x, particles[b].y);
+          ctx.strokeStyle = 'rgba(56, 189, 248, ' + (1 - dist2 / 120) * 0.25 + ')';
+          ctx.lineWidth = 1;
+          ctx.stroke();
+        }
+      }
+    }
+
+    if (!reduceMotion) requestAnimationFrame(step);
+  }
+
+  window.addEventListener('resize', resize);
+  window.addEventListener('mousemove', function (e) {
+    mouse.x = e.clientX;
+    mouse.y = e.clientY;
+  });
+  window.addEventListener('mouseleave', function () {
+    mouse.x = null;
+    mouse.y = null;
+  });
+
+  resize();
+  step(); // draws at least one static frame even if reduced motion is on
+})();
+</script>
