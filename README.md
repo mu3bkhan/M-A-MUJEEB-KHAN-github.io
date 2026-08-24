@@ -305,110 +305,221 @@ Problem-solving · Analytical thinking · Willingness to learn · Teamwork and c
   live *.github.io page)
 ========================================================== -->
 
-<div id="bg-canvas-wrap">
-  <canvas id="bg-canvas"></canvas>
+<!-- =========================================================
+  CINEMATIC ANIMATED BACKGROUND
+  Layers: drifting nebula glow  →  parallax starfield  →  glowing particle network
+  Paste this block near the TOP of your README.md.
+  (Animates on your live *.github.io Pages URL — github.com
+  sanitizes scripts, so it stays static there.)
+========================================================== -->
+
+<div id="bg-wrap">
+  <canvas id="bg-nebula"></canvas>
+  <canvas id="bg-stars"></canvas>
+  <canvas id="bg-particles"></canvas>
 </div>
 
 <style>
-  #bg-canvas-wrap {
+  #bg-wrap {
     position: fixed;
     inset: 0;
     z-index: -1;
-    background: radial-gradient(circle at 50% 0%, #0d1b2a 0%, #030712 70%);
+    background: #05070d;
+    overflow: hidden;
   }
-  #bg-canvas { width: 100%; height: 100%; display: block; }
-
-  /* Make sure your page content sits above the background and is readable */
+  #bg-wrap canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
   body { background: transparent !important; }
+
+  @media (prefers-reduced-motion: reduce) {
+    #bg-wrap * { animation: none !important; }
+  }
 </style>
 
 <script>
 (function () {
-  var canvas = document.getElementById('bg-canvas');
-  var ctx = canvas.getContext('2d');
-  var particles = [];
-  var mouse = { x: null, y: null };
   var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var DPR = Math.min(window.devicePixelRatio || 1, 2);
+
+  var nebulaCanvas = document.getElementById('bg-nebula');
+  var starCanvas   = document.getElementById('bg-stars');
+  var partCanvas   = document.getElementById('bg-particles');
+  var nCtx = nebulaCanvas.getContext('2d');
+  var sCtx = starCanvas.getContext('2d');
+  var pCtx = partCanvas.getContext('2d');
+
+  var W, H;
+  var mouse = { x: 0, y: 0, tx: 0, ty: 0 }; // t = target (for smoothing)
+  var blobs = [], stars = [], particles = [];
+  var t0 = performance.now();
 
   function resize() {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-    initParticles();
+    W = window.innerWidth;
+    H = window.innerHeight;
+    [nebulaCanvas, starCanvas, partCanvas].forEach(function (c) {
+      c.width = W * DPR;
+      c.height = H * DPR;
+    });
+    nCtx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    sCtx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    pCtx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    initScene();
   }
 
-  function initParticles() {
-    var count = Math.min(110, Math.floor((canvas.width * canvas.height) / 14000));
+  function rand(a, b) { return a + Math.random() * (b - a); }
+
+  function initScene() {
+    // --- soft drifting color blobs (nebula) ---
+    blobs = [];
+    var palette = ['rgba(56,189,248,', 'rgba(129,140,248,', 'rgba(232,121,249,'];
+    for (var i = 0; i < 4; i++) {
+      blobs.push({
+        x: rand(0, W), y: rand(0, H),
+        r: rand(Math.min(W, H) * 0.28, Math.min(W, H) * 0.45),
+        color: palette[i % palette.length],
+        angle: rand(0, Math.PI * 2),
+        speed: rand(0.00006, 0.00014),
+        orbit: rand(60, 160)
+      });
+    }
+
+    // --- distant parallax stars ---
+    stars = [];
+    var starCount = Math.floor((W * H) / 9000);
+    for (var j = 0; j < starCount; j++) {
+      stars.push({
+        x: rand(0, W), y: rand(0, H),
+        r: rand(0.4, 1.5),
+        baseAlpha: rand(0.25, 0.9),
+        twinkleSpeed: rand(0.0006, 0.002),
+        twinklePhase: rand(0, Math.PI * 2),
+        depth: rand(0.15, 0.6) // parallax factor
+      });
+    }
+
+    // --- foreground glowing particles ---
     particles = [];
-    for (var i = 0; i < count; i++) {
+    var pCount = Math.min(70, Math.floor((W * H) / 22000));
+    for (var k = 0; k < pCount; k++) {
       particles.push({
-        x: Math.random() * canvas.width,
-        y: Math.random() * canvas.height,
-        vx: (Math.random() - 0.5) * 0.4,
-        vy: (Math.random() - 0.5) * 0.4,
-        r: Math.random() * 1.6 + 0.6
+        x: rand(0, W), y: rand(0, H),
+        vx: rand(-0.12, 0.12), vy: rand(-0.12, 0.12),
+        r: rand(1, 2.4),
+        depth: rand(0.5, 1)
       });
     }
   }
 
-  function step() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  function drawNebula(time) {
+    nCtx.clearRect(0, 0, W, H);
+    for (var i = 0; i < blobs.length; i++) {
+      var b = blobs[i];
+      var ang = b.angle + time * b.speed;
+      var cx = b.x + Math.cos(ang) * b.orbit;
+      var cy = b.y + Math.sin(ang) * b.orbit;
+      var g = nCtx.createRadialGradient(cx, cy, 0, cx, cy, b.r);
+      g.addColorStop(0, b.color + '0.22)');
+      g.addColorStop(1, b.color + '0)');
+      nCtx.fillStyle = g;
+      nCtx.beginPath();
+      nCtx.arc(cx, cy, b.r, 0, Math.PI * 2);
+      nCtx.fill();
+    }
+  }
 
-    // update + draw particles
+  function drawStars(time) {
+    sCtx.clearRect(0, 0, W, H);
+    var px = (mouse.x - W / 2);
+    var py = (mouse.y - H / 2);
+    for (var i = 0; i < stars.length; i++) {
+      var s = stars[i];
+      var alpha = s.baseAlpha * (0.6 + 0.4 * Math.sin(time * s.twinkleSpeed + s.twinklePhase));
+      sCtx.beginPath();
+      sCtx.arc(s.x - px * s.depth * 0.02, s.y - py * s.depth * 0.02, s.r, 0, Math.PI * 2);
+      sCtx.fillStyle = 'rgba(255,255,255,' + alpha.toFixed(3) + ')';
+      sCtx.fill();
+    }
+  }
+
+  function drawParticles() {
+    pCtx.clearRect(0, 0, W, H);
+    var px = (mouse.x - W / 2);
+    var py = (mouse.y - H / 2);
+
+    // update
     for (var i = 0; i < particles.length; i++) {
       var p = particles[i];
       p.x += p.vx;
       p.y += p.vy;
-
-      if (p.x < 0 || p.x > canvas.width) p.vx *= -1;
-      if (p.y < 0 || p.y > canvas.height) p.vy *= -1;
-
-      // gentle attraction toward cursor
-      if (mouse.x !== null) {
-        var dx = mouse.x - p.x, dy = mouse.y - p.y;
-        var dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist < 140) {
-          p.x -= dx * 0.002;
-          p.y -= dy * 0.002;
-        }
-      }
-
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(56, 189, 248, 0.8)'; // cyan
-      ctx.fill();
+      if (p.x < -20) p.x = W + 20; else if (p.x > W + 20) p.x = -20;
+      if (p.y < -20) p.y = H + 20; else if (p.y > H + 20) p.y = -20;
     }
 
-    // draw connecting lines between nearby particles
+    // connecting lines with soft glow
     for (var a = 0; a < particles.length; a++) {
-      for (var b = a + 1; b < particles.length; b++) {
-        var dx2 = particles[a].x - particles[b].x;
-        var dy2 = particles[a].y - particles[b].y;
-        var dist2 = Math.sqrt(dx2 * dx2 + dy2 * dy2);
-        if (dist2 < 120) {
-          ctx.beginPath();
-          ctx.moveTo(particles[a].x, particles[a].y);
-          ctx.lineTo(particles[b].x, particles[b].y);
-          ctx.strokeStyle = 'rgba(56, 189, 248, ' + (1 - dist2 / 120) * 0.25 + ')';
-          ctx.lineWidth = 1;
-          ctx.stroke();
+      for (var b2 = a + 1; b2 < particles.length; b2++) {
+        var dx = particles[a].x - particles[b2].x;
+        var dy = particles[a].y - particles[b2].y;
+        var dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < 130) {
+          pCtx.beginPath();
+          pCtx.moveTo(particles[a].x - px * particles[a].depth * 0.015, particles[a].y - py * particles[a].depth * 0.015);
+          pCtx.lineTo(particles[b2].x - px * particles[b2].depth * 0.015, particles[b2].y - py * particles[b2].depth * 0.015);
+          pCtx.strokeStyle = 'rgba(125,211,252,' + ((1 - dist / 130) * 0.18).toFixed(3) + ')';
+          pCtx.lineWidth = 1;
+          pCtx.stroke();
         }
       }
     }
 
-    if (!reduceMotion) requestAnimationFrame(step);
+    // glowing dots
+    for (var k = 0; k < particles.length; k++) {
+      var pt = particles[k];
+      var ox = pt.x - px * pt.depth * 0.015;
+      var oy = pt.y - py * pt.depth * 0.015;
+      pCtx.beginPath();
+      pCtx.arc(ox, oy, pt.r * 3, 0, Math.PI * 2);
+      var glow = pCtx.createRadialGradient(ox, oy, 0, ox, oy, pt.r * 3);
+      glow.addColorStop(0, 'rgba(125,211,252,0.5)');
+      glow.addColorStop(1, 'rgba(125,211,252,0)');
+      pCtx.fillStyle = glow;
+      pCtx.fill();
+
+      pCtx.beginPath();
+      pCtx.arc(ox, oy, pt.r, 0, Math.PI * 2);
+      pCtx.fillStyle = 'rgba(224,242,254,0.95)';
+      pCtx.fill();
+    }
+  }
+
+  function loop(now) {
+    var time = now - t0;
+    // ease mouse position for smooth parallax (no jitter)
+    mouse.x += (mouse.tx - mouse.x) * 0.05;
+    mouse.y += (mouse.ty - mouse.y) * 0.05;
+
+    drawNebula(time);
+    drawStars(time);
+    drawParticles();
+
+    if (!reduceMotion) requestAnimationFrame(loop);
   }
 
   window.addEventListener('resize', resize);
   window.addEventListener('mousemove', function (e) {
-    mouse.x = e.clientX;
-    mouse.y = e.clientY;
-  });
-  window.addEventListener('mouseleave', function () {
-    mouse.x = null;
-    mouse.y = null;
+    mouse.tx = e.clientX;
+    mouse.ty = e.clientY;
   });
 
+  mouse.x = mouse.tx = window.innerWidth / 2;
+  mouse.y = mouse.ty = window.innerHeight / 2;
+
   resize();
-  step(); // draws at least one static frame even if reduced motion is on
+  requestAnimationFrame(loop);
+  if (reduceMotion) { drawNebula(0); drawStars(0); drawParticles(); } // one static frame
 })();
 </script>
